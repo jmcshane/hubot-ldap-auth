@@ -18,6 +18,15 @@ client = ldap.createClient {
 }
 
 
+baseDn = process.env.LDAP_SEARCH_BASE_DN or "dc=example,dc=com"
+
+groupObjectClass = process.env.LDAP_GROUP_OBJECT_CLASS or "groupOfNames"
+userObjectClass = process.env.LDAP_USER_OBJECT_CLASS or "inetOrgPerson"
+userNameAttribute = process.env.LDAP_USER_NAME_ATTRIBUTE or "cn"
+groupNameAttribute = process.env.LDAP_GROUP_NAME_ATTRIBUTE or "cn"
+
+@typeIsArray = Array.isArray || ( value ) -> return {}.toString.call( value ) is '[object Array]'
+
 module.exports = (robot) ->
 
   class Auth
@@ -30,32 +39,57 @@ module.exports = (robot) ->
           return true if role in userRoles
       return false
 
+    #When the user list comes back from LDAP, we can transform it by putting an @ symbol
+    #before the user attribute or we can override this behavior with the
+    #robot.authPlugin.ldapToHipchat function
     usersWithRole: (role) ->
-      @getUsersFromRole role
+      ((robot.authPlugin.ldapToHipchat or (a) -> "@#{a}") user for user in @getUsersFromRole role)
 
+    #First apply a transformation to the user object
+    #  - defaults to get the user name
+    #  - overridden by robot.authPlugin.userTransform
+    #Then get the user DN from LDAP
+    #  - defaults to the @getDnForUser
+    #  - overridden by robot.authPlugin.getDnForUser
     userRoles: (user) ->
-      @getRolesForUser @getDnForUser user
+      userTransform = robot.authPlugin.userTransform or @getUserName
+      dnFunc = robot.authPlugin.getDnForUser or @getDnForUser
+      @getRolesForUser dnFunc userTransform user
 
+    @getUserName: (user) ->
+      user.name
+
+    #The default implementation searches for a user using the cn attribute
+    #This can be overridden using two things
+    #  - robot.authPlugin.filterProvider - function that returns a filter query
+    #  - process.env.LDAP_USER_NAME_ATTRIBUTE - user name attribute in LDAP
     @getDnForUser: (user) ->
+      filter = robot.authPlugin.filterProvider or @getDefaultFilter
+      @dnSearch filter user
+
+    @getDefaultFilter: (user)->
+      @dnSearch "(&(objectclass=#{userObjectClass})(#{userNameAttribute}=#{user}))"
+
+    @dnSearch: (filter) ->
       opts = {
-        filter: "(&(objectclass=inetOrgPerson)(cn=#{user}))"
+        filter: filter
         scope: 'sub'
         sizeLimit: 1
         attributes: [
           'dn'
-        ]
+        ]        
       }
       @executeSearch opts, "", (output, entry) ->
         entry.dn
 
     @getRolesForUser: (dn) ->
       opts = {
-        filter: "(&(objectclass=groupOfNames)(member=#{dn}))"
+        filter: "(&(objectclass=#{groupObjectClass})(member=#{dn}))"
         scope: 'sub'
         sizeLimit: 200
         attributes: [
-          'cn'
-        ]     
+          "#{groupNameAttribute}"
+        ]
       }
       @executeSearch opts, [], (arr, entry) ->
         arr.push entry.cn
@@ -64,30 +98,36 @@ module.exports = (robot) ->
     @getUsersFromRole: (role) ->
       users = []
       opts = {
-        filter: "(&(objectclass=inetOrgPerson)(cn=#{role}))"
+        filter: "(&(objectclass=#{groupObjectClass})(#{groupNameAttribute}=#{role}))"
         scope: 'sub'
         sizeLimit: 200
         attributes: [
-          'cn'
           'member'
         ]     
       }
       @executeSearch opts, [], (arr, entry) ->
-        arr.concat entry.member
+        memberResp = entry.member
+        if typeisArray memberResp
+          arr.concat memberResp
+        else
+          arr.push memberResp
         arr
-
 
     @executeSearch: (opts, val, cb) ->
       deferred = Q.defer()
-      search 'dc=example,dc=com', opts, (err, res) ->
+      search baseDn, opts, (err, res) ->
         if err then deferred.reject err
         res.on 'searchEntry', (entry) ->
           val = cb(val,entry)
         res.on 'end', (result) ->
-          deferred.resolve arr
+          setTimeout ->
+            deferred.resolve arr
+          ,0
       deferred.promise;
 
   robot.auth = new Auth
+
+  if !robot.authPlugin then robot.authPlugin = {}
 
   robot.respond /what roles? do(es)? @?(.+) have\?*$/i, (msg) ->
     name = msg.match[2].trim()
