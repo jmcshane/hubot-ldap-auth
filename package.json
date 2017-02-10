@@ -1,0 +1,31 @@
+{
+  "name": "hubot-ldap-auth",
+  "version": "1.0.0",
+  "description": "An auth module for Hubot that delegates to an LDAP server",
+  "main": "index.coffee",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jmcshane/hubot-ldap-auth.git"
+  },
+  "keywords": [
+    "hubot",
+    "ldap",
+    "middleware",
+    "authorization"
+  ],
+  "author": "jmcshane <jmcshan1@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jmcshane/hubot-ldap-auth/issues"
+  },
+  "homepage": "https://github.com/jmcshane/hubot-ldap-auth#readme",
+  "dependencies": {
+    "fs": "0.0.1-security",
+    "ldapjs": "^1.0.1",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "hubot": "^2.19.0",
+    "hubot-test-helper": "^1.5.1"
+  }
+}
