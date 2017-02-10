@@ -10,8 +10,8 @@
   "keywords": [
     "hubot",
     "ldap",
-    "middleware",
-    "authorization"
+    "authorization",
+    "hubot-scripts"
   ],
   "author": "jmcshane <jmcshan1@gmail.com>",
   "license": "MIT",
