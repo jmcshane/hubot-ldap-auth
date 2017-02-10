@@ -13,7 +13,7 @@
 
 LDAP = require 'ldapjs'
 Q = require 'q'
-client = ldap.createClient {
+client = LDAP.createClient {
   url: process.env.LDAP_URL
 }
 
