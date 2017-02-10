@@ -22,7 +22,8 @@
   "dependencies": {
     "fs": "0.0.1-security",
     "ldapjs": "^1.0.1",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "q": "^1.4.1"
   },
   "devDependencies": {
     "chai": "^3.5.0",

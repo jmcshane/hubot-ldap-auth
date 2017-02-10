@@ -2,7 +2,7 @@
 #   Delegate authorization for Hubot user actions to LDAP
 #
 # Configuration:
-#
+#   LDAP_URL - the URL to the LDAP server
 # Commands:
 #   hubot what roles does <user> have - Find out what roles a user has
 #   hubot what roles do I have - Find out what roles you have
@@ -12,6 +12,7 @@
 #
 
 LDAP = require 'ldapjs'
+Q = require 'q'
 client = ldap.createClient {
   url: process.env.LDAP_URL
 }
@@ -33,16 +34,58 @@ module.exports = (robot) ->
       @getUsersFromRole role
 
     userRoles: (user) ->
-      @getRolesForUser @getCnForUser user
+      @getRolesForUser @getDnForUser user
 
-    @getCnForUser: (user) ->
-      "cn=bob"
+    @getDnForUser: (user) ->
+      opts = {
+        filter: "(&(objectclass=inetOrgPerson)(cn=#{user}))"
+        scope: 'sub'
+        sizeLimit: 1
+        attributes: [
+          'dn'
+        ]
+      }
+      @executeSearch opts, "", (output, entry) ->
+        entry.dn
 
-    @getRolesForUser: (user) ->
-      ["grp1", "grp2"]
+    @getRolesForUser: (dn) ->
+      opts = {
+        filter: "(&(objectclass=groupOfNames)(member=#{dn}))"
+        scope: 'sub'
+        sizeLimit: 200
+        attributes: [
+          'cn'
+        ]     
+      }
+      @executeSearch opts, [], (arr, entry) ->
+        arr.push entry.cn
+        arr
 
     @getUsersFromRole: (role) ->
-      ["user1", "jane"]
+      users = []
+      opts = {
+        filter: "(&(objectclass=inetOrgPerson)(cn=#{role}))"
+        scope: 'sub'
+        sizeLimit: 200
+        attributes: [
+          'cn'
+          'member'
+        ]     
+      }
+      @executeSearch opts, [], (arr, entry) ->
+        arr.concat entry.member
+        arr
+
+
+    @executeSearch: (opts, val, cb) ->
+      deferred = Q.defer()
+      search 'dc=example,dc=com', opts, (err, res) ->
+        if err then deferred.reject err
+        res.on 'searchEntry', (entry) ->
+          val = cb(val,entry)
+        res.on 'end', (result) ->
+          deferred.resolve arr
+      deferred.promise;
 
   robot.auth = new Auth
 
