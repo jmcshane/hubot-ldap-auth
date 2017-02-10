@@ -25,7 +25,13 @@
     "path": "^0.12.7"
   },
   "devDependencies": {
+    "chai": "^3.5.0",
+    "coffee-coverage": "^1.0.1",
     "hubot": "^2.19.0",
-    "hubot-test-helper": "^1.5.1"
+    "hubot-test-helper": "^1.5.1",
+    "mocha": "^3.2.0"
+  },
+  "scripts" : {
+    "test" : "mocha --recursive --compilers "coffee:coffee-script/register" --require coffee-coverage/register-istanbul test/*.coffee"
   }
 }
