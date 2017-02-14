@@ -1,6 +1,6 @@
 {
   "name": "hubot-ldap-auth",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "An auth module for Hubot that delegates to an LDAP server",
   "main": "index.coffee",
   "repository": {
