@@ -11,3 +11,17 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 * `USER_LDAP_ATTRIBUTE` - the ldap attribute that matches an attribute from `USER_HIPCHAT_ATTRIBUTE`
 * `USER_HIPCHAT_ATTRIBUTE` - the hipchat user attribute that matches a value in LDAP
 * `LDAP_REFRESH_TIME` - set to 6 hours to reset the roles and users, can be done on demand.  Is requeried every time the app starts up
+
+## Integration with Hubot
+
+This script is meant to be used with the [hubot-auth-middleware](https://github.com/HelloFax/hubot-auth-middleware) project which uses the auth plugin in Hubot to determine whether a user can take a particular action.  See the [README.md](https://github.com/HelloFax/hubot-auth-middleware/blob/master/README.md) of that project for more details on configuring roles for user actions.
+
+In order to set up this plugin, first install it in the project:
+
+    npm install hubot-ldap-auth --save
+
+Then, add the script to the `external-scripts.json` file:
+
+    [
+      "hubot-ldap-auth"
+    ]
