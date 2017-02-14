@@ -5,3 +5,9 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 ## Configuration
 
 * `LDAP_URL` - the client will attempt to bind a session to the LDAP server using this URL
+* `LDAP_SEARCH_BASE_DN` - the base dn for the ldap search user
+* `LDAP_GROUP_OBJECT_CLASS` - the object class to use to find LDAP groups
+* `LDAP_USER_OBJECT_CLASS` - the user object class to identify users from LDAP
+* `USER_LDAP_ATTRIBUTE` - the ldap attribute that matches an attribute from `USER_HIPCHAT_ATTRIBUTE`
+* `USER_HIPCHAT_ATTRIBUTE` - the hipchat user attribute that matches a value in LDAP
+* `LDAP_REFRESH_TIME` - set to 6 hours to reset the roles and users, can be done on demand.  Is requeried every time the app starts up
