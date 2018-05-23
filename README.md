@@ -6,13 +6,20 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 
 ## Configuration
 
-* `LDAP_URL` - the client will attempt to bind a session to the LDAP server using this URL
-* `LDAP_SEARCH_BASE_DN` - the base dn for the ldap search user
-* `LDAP_GROUP_OBJECT_CLASS` - the object class to use to find LDAP groups
-* `LDAP_USER_OBJECT_CLASS` - the user object class to identify users from LDAP
-* `USER_LDAP_ATTRIBUTE` - the ldap attribute that matches an attribute from `USER_HIPCHAT_ATTRIBUTE`
-* `USER_HIPCHAT_ATTRIBUTE` - the hipchat user attribute that matches a value in LDAP
-* `LDAP_REFRESH_TIME` - set to 6 hours to reset the roles and users, can be done on demand.  Is requeried every time the app starts up
+* `HUBOT_LDAP_AUTH_LDAP_URL` - the URL to the LDAP server
+* `HUBOT_LDAP_AUTH_BIND_DN` - the bind DN to authenticate with
+* `HUBOT_LDAP_AUTH_BIND_PASSWORD` - the bind password to authenticate with
+* `HUBOT_LDAP_AUTH_USER_SEARCH_FILTER` - the ldap filter search for a specific user - e.g. 'cn={0}' where '{0}' will be replaced by the hubot user attribute
+* `HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE` - the member attribute within the user object
+* `HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER` - the membership filter to find groups based on user DN - e.g. 'member={0}' where '{0}' will be replaced by user DN
+* `HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_SEARCH_METHOD` - (filter | attribute) - how to find groups belong to users
+* `HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE` - comma separated group names that will be used as roles, all the rest of the groups will be filtered out
+* `HUBOT_LDAP_AUTH_USE_ONLY_LISTENER_ROLES` - if true, groups will be filtered by all listener options, all the rest of the groups will be filtered out
+* `HUBOT_LDAP_AUTH_SEARCH_BASE_DN` - search DN to start finding users and groups within the ldap directory
+* `HUBOT_LDAP_AUTH_USER_LDAP_ATTRIBUTE` - the ldap attribute to match hubot users within the ldap directory
+* `HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE` - the hubot user attribute to search for a user within the ldap directory
+* `HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE` - the ldap attribute of a group that will be used as role name
+* `HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME` - time in millisecods to refresh the roles and users
 
 ## Integration with Hubot
 
