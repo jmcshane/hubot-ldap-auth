@@ -2,7 +2,21 @@
 #   Delegate authorization for Hubot user actions to LDAP
 #
 # Configuration:
-#   LDAP_URL - the URL to the LDAP server
+#   HUBOT_LDAP_AUTH_LDAP_URL - the URL to the LDAP server
+#   HUBOT_LDAP_AUTH_BIND_DN - the bind DN to authenticate with
+#   HUBOT_LDAP_AUTH_BIND_PASSWORD - the bind password to authenticate with
+#   HUBOT_LDAP_AUTH_USER_SEARCH_FILTER - the ldap filter search for a specific user - e.g. 'cn={0}' where '{0}' will be replaced by the hubot user attribute
+#   HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE - the member attribute within the user object
+#   HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER - the membership filter to find groups based on user DN - e.g. 'member={0}' where '{0}' will be replaced by user DN
+#   HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_SEARCH_METHOD - (filter | attribute) - how to find groups belong to users
+#   HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE - comma separated group names that will be used as roles, all the rest of the groups will be filtered out
+#   HUBOT_LDAP_AUTH_USE_ONLY_LISTENER_ROLES - if true, groups will be filtered by all listener options, all the rest of the groups will be filtered out
+#   HUBOT_LDAP_AUTH_SEARCH_BASE_DN - search DN to start finding users and groups within the ldap directory
+#   HUBOT_LDAP_AUTH_USER_LDAP_ATTRIBUTE - the ldap attribute to match hubot users within the ldap directory
+#   HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE - the hubot user attribute to search for a user within the ldap directory
+#   HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE - the ldap attribute of a group that will be used as role name
+#   HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME - time in millisecods to refresh the roles and users
+
 # Commands:
 #   hubot what roles does <user> have - Find out what roles a user has
 #   hubot what roles do I have - Find out what roles you have
@@ -11,160 +25,172 @@
 # Notes:
 #   * returns bool true or false
 #
-
+_ = require 'lodash'
 LDAP = require 'ldapjs'
 Q = require 'q'
-robot = null
-client = LDAP.createClient {
-  url: process.env.LDAP_URL
-}
-
-
-baseDn = process.env.LDAP_SEARCH_BASE_DN or "dc=example,dc=com"
-
-groupObjectClass = process.env.LDAP_GROUP_OBJECT_CLASS or "groupOfNames"
-userObjectClass = process.env.LDAP_USER_OBJECT_CLASS or "inetOrgPerson"
-ldapUserNameAttribute = process.env.USER_LDAP_ATTRIBUTE or "cn"
-hipchatUserNameAttribute = process.env.USER_HIPCHAT_ATTRIBUTE or "id"
-groupNameAttribute = process.env.LDAP_GROUP_NAME_ATTRIBUTE or "cn"
-ldapRefreshTime = process.env.LDAP_REFRESH_TIME or 21600000
-
-#The default implementation searches for a user using the cn attribute
-#This can be overridden by process.env.USER_LDAP_ATTRIBUTE
-#which should be an attribute in LDAP that matches an attribute in Hipchat
-getDnForUser = (userAttr, user, cb) ->
-  dnSearch getDefaultFilter(userAttr), user, cb
-
-getDefaultFilter = (userAttr)->
-  "(&(objectclass=#{userObjectClass})(#{ldapUserNameAttribute}=#{userAttr}))"
-
-dnSearch = (filter, user, cb) ->
-  opts = {
-    filter: filter
-    scope: 'sub'
-    sizeLimit: 1
-    attributes: [
-      'dn'
-    ]
-  }
-  return executeSearch opts, "", (output, entry) ->
-    user.dn = entry.object.dn
-
-attrSearchFromFilter = (filter, attr) ->
-  opts = {
-    filter: filter
-    scope: 'sub'
-    sizeLimit: 1
-    attributes: [
-      "#{attr}"
-    ]
-  }
-  return executeSearch opts, "", (output, entry) ->
-    entry.object["#{attr}"]
-
-getRolesForUser = (dn) ->
-  val = dn.next()
-  while not val.done
-    val = dn.next()
-  opts = {
-    filter: "(&(objectclass=#{groupObjectClass})(member=#{val.value}))"
-    scope: 'sub'
-    sizeLimit: 200
-    attributes: [
-      "#{groupNameAttribute}"
-    ]
-  }
-  return executeSearch opts, [], (arr, entry) ->
-    arr.push entry.cn
-    arr
-
-getUsersFromRole = (role) ->
-  users = []
-  opts = {
-    filter: "(&(objectclass=#{groupObjectClass})(#{groupNameAttribute}=#{role}))"
-    scope: 'sub'
-    sizeLimit: 200
-    attributes: [
-      'member'
-    ]     
-  }
-  return executeSearch opts, [], (arr, entry) ->
-    if !arr then arr = []
-    newEntries = entry.attributes[0]._vals.map (val) -> val.toString()
-    arr = arr.concat newEntries
-    arr
-
-executeSearch = (opts, val, cb) ->
-  deferred = Q.defer()
-  client.search baseDn, opts, (err, res) ->
-    if err
-      deferred.reject err
-    res.on 'searchEntry', (entry) ->
-      val = cb(val,entry)
-    res.on 'end', (result) ->
-      setTimeout ->
-        deferred.resolve val
-      ,0
-
-  deferred.promise
-
-getUserForDn = (dn) ->
-  attrSearchFromFilter "(&(objectclass=#{userObjectClass})(dn=#{dn}))", "#{ldapUserNameAttribute}"
-
-loadListeners = (robot, isOneTimeRequest) ->
-  if !isOneTimeRequest
-    setTimeout ->
-      loadListeners(robot)
-    , 21600000
-  promises = []
-  users = robot.brain.users()
-  for userId in Object.keys users
-    user = users[userId]
-    if !user.dn
-      userAttr = user[hipchatUserNameAttribute]
-      if userAttr
-        promises << getDnForUser userAttr, user, (dn, user) -> 
-          user.dn = dn
-      else
-        user.dn = undefined
-    if !user.roles
-      user.roles = []
-  Q.all(promises)
-  .then (val) ->
-    loadRoles robot
-
-loadRoles = (robot) ->
-  rolesToSearch = []
-  for listener in robot.listeners
-    roles = listener.options?.roles or []
-    roles = [roles] if typeof roles is 'string'
-    for role in roles
-      if role not in rolesToSearch
-        rolesToSearch.push role
-  for role in rolesToSearch
-    evaluateRole robot,role
-
-evaluateRole = (robot, role) ->
-  if !role or role.length is 0
-    return
-  getUsersFromRole(role)
-  .then (userDns) ->
-    evaluateRoleWithDns robot, role, userDns
-
-evaluateRoleWithDns = (robot, role, userDns) ->
-  users = robot.brain.users()
-  for userId in Object.keys users
-    user = users[userId]
-    if user.dn in userDns
-      if role not in user.roles
-        user.roles.push role
-    else
-      if role in user.roles
-        user.roles = user.roles.filter (word) -> word isnt role
 
 module.exports = (inputRobot) ->
-
   robot = inputRobot
+
+  ldapURL = process.env.HUBOT_LDAP_AUTH_LDAP_URL
+  bindDn = process.env.HUBOT_LDAP_AUTH_BIND_DN
+  bindPassword = process.env.HUBOT_LDAP_AUTH_BIND_PASSWORD
+
+  userSearchFilter = process.env.HUBOT_LDAP_AUTH_USER_SEARCH_FILTER or 'cn={0}'
+  groupMembershipAttribute = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE or 'memberOf'
+  groupMembershipFilter = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER or 'member={0}'
+  groupMembershipSearchMethod = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_SEARCH_METHOD or 'attribute' # filter | attribute
+  rolesToInclude = if process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE and process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE != '' \
+    then process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE.toLowerCase().split(',')
+  useOnlyListenerRoles = process.env.HUBOT_LDAP_AUTH_USE_ONLY_LISTENER_ROLES == 'true'
+
+  baseDn = process.env.HUBOT_LDAP_AUTH_SEARCH_BASE_DN or "dc=example,dc=com"
+
+  ldapUserNameAttribute = process.env.HUBOT_LDAP_AUTH_USER_LDAP_ATTRIBUTE or process.env.USER_LDAP_ATTRIBUTE or "cn"
+  hubotUserNameAttribute = process.env.HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE or process.env.USER_HIPCHAT_ATTRIBUTE or "name"
+  groupNameAttribute = process.env.HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE or process.env.LDAP_GROUP_NAME_ATTRIBUTE or "cn"
+  ldapRefreshTime = process.env.HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME or 21600000
+
+  client = LDAP.createClient {
+    url: ldapURL
+  }
+
+  getDnForUser = (userAttr, user) ->
+    Q.fcall () ->
+      dnSearch(getUserFilter(userAttr))
+      .then (value) ->
+        { user: user, dn: value }
+
+
+  getUserFilter = (userAttr)->
+    userSearchFilter.replace(/\{0\}/g, userAttr)
+
+  dnSearch = (filter) ->
+    opts = {
+      filter: filter
+      scope: 'sub'
+      sizeLimit: 1
+      attributes: [
+        'dn'
+      ]
+    }
+    Q.fcall () ->
+      executeSearch opts
+      .then (value) ->
+        if not value or value.length == 0
+          throw new Error('No DN found')
+        value[0].attributes[0].vals[0].toString()
+
+
+  getGroupsForUser = (user) ->
+    if groupMembershipSearchMethod == 'attribute'
+      filter = "(dn=#{user.dn})"
+      attribute = groupMembershipAttribute
+    else
+      filter = groupMembershipFilter.replace(/\{0\}/g, user.dn)
+      attribute = 'dn'
+    opts = {
+      filter: filter
+      scope: 'sub'
+      sizeLimit: 200
+      attributes: [
+        attribute
+      ]
+    }
+    Q.fcall () ->
+      executeSearch opts
+      .then (value) ->
+        value = value.map (entry) ->
+          entry.attributes[0].vals.map (v) -> v.toString()
+        _.flattenDeep(value).map (v) ->
+          opts = {
+            filter: "(dn=#{v})"
+            scope: 'sub'
+            sizeLimit: 1
+            attributes: [
+              groupNameAttribute
+            ]
+          }
+          executeSearch opts
+          .then (entries) ->
+            entries = entries.map (value) -> value.attributes[0].vals[0].toString()
+            entries[0]
+
+  executeSearch = (opts) ->
+    deferred = Q.defer()
+    if bindDn and bindPassword
+      client.bind bindDn, bindPassword, (error) =>
+        if error
+          deferred.reject error
+        else
+          deferred.resolve _executeSearch(opts)
+    else
+      deferred.resolve _executeSearch(opts)
+
+    deferred.promise
+
+  _executeSearch = (opts) ->
+    deferred = Q.defer()
+    client.search baseDn, opts, (err, res) ->
+      arr = []
+      if err
+        deferred.reject err
+      res.on 'searchEntry', (entry) ->
+        arr.push entry
+      res.on 'end', (result) ->
+        deferred.resolve arr
+    deferred.promise
+
+  loadListeners = (isOneTimeRequest) ->
+    if !isOneTimeRequest
+      setTimeout ->
+        loadListeners()
+      , 21600000
+    listenerRoles = loadListenerRoles()
+      .map (e) -> e.toLowerCase()
+    promises = []
+    users = robot.brain.users()
+    for userId in Object.keys users
+      user = users[userId]
+      if !user.dn
+        userAttr = user[hubotUserNameAttribute]
+        if userAttr
+          ret = getDnForUser userAttr, user
+          promises.push ret
+        else
+          user.dn = undefined
+
+    Q.all(promises)
+    .then (entries) ->
+      entries.map (entry) ->
+        entry.user.dn = entry.dn
+        entry.user
+    .then (users) ->
+      _.mapValues users, (user) ->
+          groups = getGroupsForUser user
+          Q.all(groups)
+          .then (entries) ->
+            filterRoles = if useOnlyListenerRoles then listenerRoles else rolesToInclude
+            if filterRoles and filterRoles.length > 0
+              entries = entries.filter (e) -> e.toLowerCase() in filterRoles
+
+            user.roles = _.sortBy(entries)
+            user.roles
+    .catch (err) ->
+      robot.logger.error "Error while loading users", err
+      robot.emit 'error', err
+    .done()
+
+
+  loadListenerRoles = () ->
+    rolesToSearch = []
+    for listener in robot.listeners
+      roles = listener.options?.roles or []
+      roles = [roles] if typeof roles is 'string'
+      for role in roles
+        if role not in rolesToSearch
+          rolesToSearch.push role
+    rolesToSearch
 
   class Auth
 
@@ -181,7 +207,7 @@ module.exports = (inputRobot) ->
       for own key, user of robot.brain.data.users
         if @hasRole(user, role)
           users.push(user.name)
-      users      
+      users
 
     userRoles: (user) ->
       if user.roles?
@@ -190,14 +216,13 @@ module.exports = (inputRobot) ->
 
   robot.auth = new Auth
 
-  setTimeout ->
-    loadListeners(robot)
-  , 1000
-
-  if !robot.authPlugin then robot.authPlugin = {}
+  robot.brain.on 'loaded', ->
+    setTimeout ->
+      loadListeners()
+    , 0
 
   robot.respond /refresh roles/i, (msg) ->
-    loadListeners(robot, true)
+    loadListeners(true)
 
   robot.respond /what roles? do(es)? @?(.+) have\?*$/i, (msg) ->
     name = msg.match[2].trim()
@@ -209,7 +234,6 @@ module.exports = (inputRobot) ->
     if userRoles.length == 0
       msg.reply "#{name} has no roles."
     else
-      robot.logger.error userRoles
       msg.reply "#{name} has the following roles: #{userRoles.join(', ')}."
 
   robot.respond /who has (["'\w: -_]+) role\?*$/i, (msg) ->
@@ -217,6 +241,6 @@ module.exports = (inputRobot) ->
     userNames = robot.auth.usersWithRole(role) if role?
 
     if userNames.length > 0
-      msg.reply "The following people have the '#{role}' role: #{userNames.join(', ')}"
+      msg.reply "The following people have the '#{role}' role: #{_.sortBy(userNames).join(', ')}"
     else
       msg.reply "There are no people that have the '#{role}' role."
