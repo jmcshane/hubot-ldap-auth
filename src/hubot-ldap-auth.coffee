@@ -17,7 +17,7 @@
 #   HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE - the ldap attribute of a group that will be used as role name
 #   HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME - time in millisecods to refresh the roles and users
 #   HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME - the dn attribute name, used for queries by DN. In ActiveDirectory should be distinguishedName
-
+#
 # Commands:
 #   hubot what roles does <user> have - Find out what roles a user has
 #   hubot what roles do I have - Find out what roles you have
