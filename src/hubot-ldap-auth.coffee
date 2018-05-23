@@ -22,6 +22,7 @@
 #   hubot what roles does <user> have - Find out what roles a user has
 #   hubot what roles do I have - Find out what roles you have
 #   hubot refreh roles
+#   hubot who has <roleName> role
 #
 # Notes:
 #   * returns bool true or false
