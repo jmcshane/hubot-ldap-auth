@@ -16,6 +16,7 @@
 #   HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE - the hubot user attribute to search for a user within the ldap directory
 #   HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE - the ldap attribute of a group that will be used as role name
 #   HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME - time in millisecods to refresh the roles and users
+#   HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME - the dn attribute name, used for queries by DN. In ActiveDirectory should be distinguishedName
 
 # Commands:
 #   hubot what roles does <user> have - Find out what roles a user has
@@ -37,6 +38,7 @@ module.exports = (inputRobot) ->
   bindPassword = process.env.HUBOT_LDAP_AUTH_BIND_PASSWORD
 
   userSearchFilter = process.env.HUBOT_LDAP_AUTH_USER_SEARCH_FILTER or 'cn={0}'
+  dnAttributeName = process.env.HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME or 'dn'
   groupMembershipAttribute = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE or 'memberOf'
   groupMembershipFilter = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER or 'member={0}'
   groupMembershipSearchMethod = process.env.HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_SEARCH_METHOD or 'attribute' # filter | attribute
@@ -46,20 +48,24 @@ module.exports = (inputRobot) ->
 
   baseDn = process.env.HUBOT_LDAP_AUTH_SEARCH_BASE_DN or "dc=example,dc=com"
 
-  ldapUserNameAttribute = process.env.HUBOT_LDAP_AUTH_USER_LDAP_ATTRIBUTE or process.env.USER_LDAP_ATTRIBUTE or "cn"
-  hubotUserNameAttribute = process.env.HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE or process.env.USER_HIPCHAT_ATTRIBUTE or "name"
-  groupNameAttribute = process.env.HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE or process.env.LDAP_GROUP_NAME_ATTRIBUTE or "cn"
+  ldapUserNameAttribute = process.env.HUBOT_LDAP_AUTH_USER_LDAP_ATTRIBUTE or "cn"
+  hubotUserNameAttribute = process.env.HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE or "name"
+  groupNameAttribute = process.env.HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE or "cn"
   ldapRefreshTime = process.env.HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME or 21600000
 
+  robot.logger.info "Starting ldap search with ldapURL: #{ldapURL}, bindDn: #{bindDn}, userSearchFilter: #{userSearchFilter},
+  groupMembershipFilter: #{groupMembershipFilter}, groupMembershipAttribute: #{groupMembershipAttribute}, groupMembershipSearchMethod: #{groupMembershipSearchMethod},
+    rolesToInclude: #{rolesToInclude}, useOnlyListenerRoles: #{useOnlyListenerRoles}, baseDn: #{baseDn},
+    ldapUserNameAttribute: #{ldapUserNameAttribute}, hubotUserNameAttribute: #{hubotUserNameAttribute}, groupNameAttribute: #{groupNameAttribute}"
+
   client = LDAP.createClient {
-    url: ldapURL
+    url: ldapURL,
+    bindDN: bindDn,
+    bindCredentials: bindPassword
   }
 
   getDnForUser = (userAttr, user) ->
-    Q.fcall () ->
-      dnSearch(getUserFilter(userAttr))
-      .then (value) ->
-        { user: user, dn: value }
+    dnSearch(getUserFilter(userAttr)).then (value) -> { user: user, dn: value }
 
 
   getUserFilter = (userAttr)->
@@ -68,27 +74,41 @@ module.exports = (inputRobot) ->
   dnSearch = (filter) ->
     opts = {
       filter: filter
-      scope: 'sub'
-      sizeLimit: 1
+      scope: 'sub',
       attributes: [
-        'dn'
-      ]
+        dnAttributeName
+      ],
+      sizeLimit: 1
     }
-    Q.fcall () ->
-      executeSearch opts
-      .then (value) ->
-        if not value or value.length == 0
-          throw new Error('No DN found')
-        value[0].attributes[0].vals[0].toString()
+    executeSearch(opts).then (value) ->
+      if not value or value.length == 0
+        return
+      else if value[0] and value[0].objectName
+        ret = value[0].objectName.toString().replace(/, /g, ',')
+        ret
 
+  getGroupNamesByDn = (dns) ->
+    filter = dns.map (dn) -> "(#{dnAttributeName}=#{dn})"
+    filter = "(|#{filter.join('')})"
+    opts = {
+        filter: filter
+        scope: 'sub'
+        sizeLimit: dns.length
+        attributes: [
+          groupNameAttribute
+        ]
+      }
+    executeSearch(opts).then (entries) ->
+      entries.map (value) -> value.attributes[0].vals[0].toString()
 
-  getGroupsForUser = (user) ->
+  getGroupsDNsForUser = (user) ->
     if groupMembershipSearchMethod == 'attribute'
-      filter = "(dn=#{user.dn})"
+      filter = "(#{dnAttributeName}=#{user.dn})"
       attribute = groupMembershipAttribute
     else
       filter = groupMembershipFilter.replace(/\{0\}/g, user.dn)
-      attribute = 'dn'
+      attribute = dnAttributeName
+    robot.logger.debug "Getting groups DNs for user: #{user.dn}, filter = #{filter}, attribute = #{attribute}"
     opts = {
       filter: filter
       scope: 'sub'
@@ -97,39 +117,10 @@ module.exports = (inputRobot) ->
         attribute
       ]
     }
-    Q.fcall () ->
-      executeSearch opts
-      .then (value) ->
-        value = value.map (entry) ->
-          entry.attributes[0].vals.map (v) -> v.toString()
-        _.flattenDeep(value).map (v) ->
-          opts = {
-            filter: "(dn=#{v})"
-            scope: 'sub'
-            sizeLimit: 1
-            attributes: [
-              groupNameAttribute
-            ]
-          }
-          executeSearch opts
-          .then (entries) ->
-            entries = entries.map (value) -> value.attributes[0].vals[0].toString()
-            entries[0]
+    executeSearch(opts).then (value) ->
+      _.flattenDeep value.map (entry) -> entry.attributes[0].vals.map (v) -> v.toString()
 
   executeSearch = (opts) ->
-    deferred = Q.defer()
-    if bindDn and bindPassword
-      client.bind bindDn, bindPassword, (error) =>
-        if error
-          deferred.reject error
-        else
-          deferred.resolve _executeSearch(opts)
-    else
-      deferred.resolve _executeSearch(opts)
-
-    deferred.promise
-
-  _executeSearch = (opts) ->
     deferred = Q.defer()
     client.search baseDn, opts, (err, res) ->
       arr = []
@@ -137,6 +128,8 @@ module.exports = (inputRobot) ->
         deferred.reject err
       res.on 'searchEntry', (entry) ->
         arr.push entry
+      res.on 'error', (err) ->
+        deferred.reject err
       res.on 'end', (result) ->
         deferred.resolve arr
     deferred.promise
@@ -146,6 +139,7 @@ module.exports = (inputRobot) ->
       setTimeout ->
         loadListeners()
       , 21600000
+    robot.logger.info "Loading users and roles from LDAP"
     listenerRoles = loadListenerRoles()
       .map (e) -> e.toLowerCase()
     promises = []
@@ -160,26 +154,45 @@ module.exports = (inputRobot) ->
         else
           user.dn = undefined
 
-    Q.all(promises)
-    .then (entries) ->
-      entries.map (entry) ->
+    promises.forEach (promise) ->
+      promise.then (entry) ->
         entry.user.dn = entry.dn
+        if entry.user.dn
+          robot.logger.debug "Found DN for user #{entry.user.name}, DN: #{entry.user.dn}"
         entry.user
-    .then (users) ->
-      _.mapValues users, (user) ->
-          groups = getGroupsForUser user
-          Q.all(groups)
-          .then (entries) ->
-            filterRoles = if useOnlyListenerRoles then listenerRoles else rolesToInclude
-            if filterRoles and filterRoles.length > 0
-              entries = entries.filter (e) -> e.toLowerCase() in filterRoles
 
-            user.roles = _.sortBy(entries)
-            user.roles
-    .catch (err) ->
-      robot.logger.error "Error while loading users", err
-      robot.emit 'error', err
-    .done()
+      .then (user) ->
+        if not user.dn
+          throw new Error("User #{user.name} does not have a dn, skipping")
+        getGroupsDNsForUser(user)
+        .then (groupDns) -> {user: user, groups: groupDns}
+
+      .then (entry) ->
+        getGroupNamesByDn(entry.groups)
+        .then (groupNames) -> {user: entry.user, groupNames: groupNames}
+
+      .then (entry) ->
+        entries = entry.groupNames
+        robot.logger.debug "groupNames for #{entry.user.name} are #{entries}"
+        filterRoles = if useOnlyListenerRoles then listenerRoles else rolesToInclude
+        if filterRoles and filterRoles.length > 0
+          entries = entries.filter (e) -> e.toLowerCase() in filterRoles
+        robot.logger.debug "groupNames for #{entry.user.name} are #{entries} - after filter"
+
+        entry.user.roles = _.sortBy(entries)
+        entry.user.roles
+        entry.user
+      .then (user) ->
+        brainUser = robot.brain.userForId user.id
+        brainUser.roles = user.roles
+        brainUser.dn = user.dn
+        robot.brain.save()
+
+      .catch (err) ->
+        robot.logger.error "Error while getting user groups", err
+
+      .done()
+    robot.logger.info "Users and roles were loaded from LDAP"
 
 
   loadListenerRoles = () ->
@@ -227,14 +240,15 @@ module.exports = (inputRobot) ->
   robot.respond /what roles? do(es)? @?(.+) have\?*$/i, (msg) ->
     name = msg.match[2].trim()
     if name.toLowerCase() is 'i' then name = msg.message.user.name
-    user = robot.brain.userForName(name) or {name: name}
+    user = robot.brain.usersForFuzzyName(name) or {name: name}
+    if user and user.length > 0 then user = user[0]
     return msg.reply "#{name} does not exist" unless user?
     userRoles = robot.auth.userRoles(user)
 
     if userRoles.length == 0
       msg.reply "#{name} has no roles."
     else
-      msg.reply "#{name} has the following roles: #{userRoles.join(', ')}."
+      msg.reply "#{user.name} has the following roles: #{userRoles.join(', ')}."
 
   robot.respond /who has (["'\w: -_]+) role\?*$/i, (msg) ->
     role = msg.match[1]

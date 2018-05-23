@@ -20,6 +20,7 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 * `HUBOT_LDAP_AUTH_HUBOT_USER_ATTRIBUTE` - the hubot user attribute to search for a user within the ldap directory
 * `HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE` - the ldap attribute of a group that will be used as role name
 * `HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME` - time in millisecods to refresh the roles and users
+* `HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME` - the dn attribute name, used for queries by DN. In ActiveDirectory should be distinguishedName
 
 ## Integration with Hubot
 
