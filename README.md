@@ -9,6 +9,11 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 * `HUBOT_LDAP_AUTH_LDAP_URL` - the URL to the LDAP server
 * `HUBOT_LDAP_AUTH_BIND_DN` - the bind DN to authenticate with
 * `HUBOT_LDAP_AUTH_BIND_PASSWORD` - the bind password to authenticate with
+* `HUBOT_LDAP_AUTH_TLS_OPTIONS_CA` - the full path to a CA certificate file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+* `HUBOT_LDAP_AUTH_TLS_OPTIONS_CERT` - the full path to a certificate file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+* `HUBOT_LDAP_AUTH_TLS_OPTIONS_KEY` - the full path to a private key file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+* `HUBOT_LDAP_AUTH_TLS_OPTIONS_CIPHERS` - cipher suite string. Passed to TLS connection layer when connecting via ldaps://
+* `HUBOT_LDAP_AUTH_TLS_OPTIONS_SECURE_PROTOCOL` - ssl method to use. Passed to TLS connection layer when connecting via ldaps://
 * `HUBOT_LDAP_AUTH_USER_SEARCH_FILTER` - the ldap filter search for a specific user - e.g. 'cn={0}' where '{0}' will be replaced by the hubot user attribute
 * `HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE` - the member attribute within the user object
 * `HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER` - the membership filter to find groups based on user DN - e.g. 'member={0}' where '{0}' will be replaced by user DN

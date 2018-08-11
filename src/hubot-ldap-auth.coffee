@@ -5,6 +5,11 @@
 #   HUBOT_LDAP_AUTH_LDAP_URL - the URL to the LDAP server
 #   HUBOT_LDAP_AUTH_BIND_DN - the bind DN to authenticate with
 #   HUBOT_LDAP_AUTH_BIND_PASSWORD - the bind password to authenticate with
+#   HUBOT_LDAP_AUTH_TLS_OPTIONS_CA - the full path to a CA certificate file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+#   HUBOT_LDAP_AUTH_TLS_OPTIONS_CERT - the full path to a certificate file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+#   HUBOT_LDAP_AUTH_TLS_OPTIONS_KEY - the full path to a private key file in PEM format. Passed to TLS connection layer when connecting via ldaps://
+#   HUBOT_LDAP_AUTH_TLS_OPTIONS_CIPHERS - cipher suite string. Passed to TLS connection layer when connecting via ldaps://
+#   HUBOT_LDAP_AUTH_TLS_OPTIONS_SECURE_PROTOCOL - ssl method to use. Passed to TLS connection layer when connecting via ldaps://
 #   HUBOT_LDAP_AUTH_USER_SEARCH_FILTER - the ldap filter search for a specific user - e.g. 'cn={0}' where '{0}' will be replaced by the hubot user attribute
 #   HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_ATTRIBUTE - the member attribute within the user object
 #   HUBOT_LDAP_AUTH_GROUP_MEMBERSHIP_FILTER - the membership filter to find groups based on user DN - e.g. 'member={0}' where '{0}' will be replaced by user DN
@@ -30,6 +35,7 @@
 _ = require 'lodash'
 LDAP = require 'ldapjs'
 Q = require 'q'
+fs = require 'fs'
 
 module.exports = (inputRobot) ->
   robot = inputRobot
@@ -37,6 +43,14 @@ module.exports = (inputRobot) ->
   ldapURL = process.env.HUBOT_LDAP_AUTH_LDAP_URL
   bindDn = process.env.HUBOT_LDAP_AUTH_BIND_DN
   bindPassword = process.env.HUBOT_LDAP_AUTH_BIND_PASSWORD
+
+  tlsOptions = {
+    ca: if process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CA then [ fs.readFileSync process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CA ] else null,
+    cert: if process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CERT then [ fs.readFileSync process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CERT ] else null,
+    key: if process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_KEY then [ fs.readFileSync process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_KEY ] else null,
+    ciphers: if process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CIPHERS then process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_CIPHERS else null,
+    secureProtocol: if process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_SECURE_PROTOCOL then process.env.HUBOT_LDAP_AUTH_TLS_OPTIONS_SECURE_PROTOCOL else null,
+  }
 
   userSearchFilter = process.env.HUBOT_LDAP_AUTH_USER_SEARCH_FILTER or 'cn={0}'
   dnAttributeName = process.env.HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME or 'dn'
@@ -59,11 +73,12 @@ module.exports = (inputRobot) ->
     rolesToInclude: #{rolesToInclude}, useOnlyListenerRoles: #{useOnlyListenerRoles}, baseDn: #{baseDn},
     ldapUserNameAttribute: #{ldapUserNameAttribute}, hubotUserNameAttribute: #{hubotUserNameAttribute}, groupNameAttribute: #{groupNameAttribute}"
 
-  client = LDAP.createClient {
+  client = LDAP.createClient({
     url: ldapURL,
     bindDN: bindDn,
-    bindCredentials: bindPassword
-  }
+    bindCredentials: bindPassword,
+    tlsOptions: tlsOptions
+  })
 
   getDnForUser = (userAttr, user) ->
     dnSearch(getUserFilter(userAttr)).then (value) -> { user: user, dn: value }
