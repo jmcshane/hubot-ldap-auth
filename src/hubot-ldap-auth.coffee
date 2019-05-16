@@ -93,7 +93,6 @@ module.exports = (inputRobot) ->
         ret
 
   getGroupNamesByDn = (dns) ->
-    robot.logger.debug(dns)
     filter = dns.map (dn) -> "(#{dnAttributeName}=#{dn})"
     filter = "(|#{filter.join('')})"
     opts = {
