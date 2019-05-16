@@ -21,6 +21,7 @@ This module is derived from the [hubot-auth](https://github.com/hubot-scripts/hu
 * `HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE` - the ldap attribute of a group that will be used as role name
 * `HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME` - time in millisecods to refresh the roles and users
 * `HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME` - the dn attribute name, used for queries by DN. In ActiveDirectory should be distinguishedName
+* `HUBOT_LDAP_AUTH_USER_ATTRIBUTE_REWRITE_RULE` - regex for rewriting the hubot username to the one used in ldap - e.g. '@(.+):matrix.org' where the first capturing group will be used as username. No subsitution if omitted
 
 ## Integration with Hubot
 
