@@ -17,6 +17,7 @@
 #   HUBOT_LDAP_AUTH_GROUP_LDAP_ATTRIBUTE - the ldap attribute of a group that will be used as role name
 #   HUBOT_LDAP_AUTH_LDAP_REFRESH_TIME - time in millisecods to refresh the roles and users
 #   HUBOT_LDAP_AUTH_DN_ATTRIBUTE_NAME - the dn attribute name, used for queries by DN. In ActiveDirectory should be distinguishedName
+#   HUBOT_LDAP_AUTH_USER_ATTRIBUTE_REWRITE_RULE - regex for rewriting the hubot username to the one used in ldap - e.g. '@(.+):matrix.org' where the first capturing group will be used as username. No subsitution if omitted
 #
 # Commands:
 #   hubot what roles does <user> have - Find out what roles a user has
@@ -46,6 +47,7 @@ module.exports = (inputRobot) ->
   rolesToInclude = if process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE and process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE != '' \
     then process.env.HUBOT_LDAP_AUTH_ROLES_TO_INCLUDE.toLowerCase().split(',')
   useOnlyListenerRoles = process.env.HUBOT_LDAP_AUTH_USE_ONLY_LISTENER_ROLES == 'true'
+  userNameRewriteRule = if process.env.HUBOT_LDAP_AUTH_USER_ATTRIBUTE_REWRITE_RULE then new RegExp(process.env.HUBOT_LDAP_AUTH_USER_ATTRIBUTE_REWRITE_RULE) else undefined
 
   baseDn = process.env.HUBOT_LDAP_AUTH_SEARCH_BASE_DN or "dc=example,dc=com"
 
@@ -57,7 +59,7 @@ module.exports = (inputRobot) ->
   robot.logger.info "Starting ldap search with ldapURL: #{ldapURL}, bindDn: #{bindDn}, userSearchFilter: #{userSearchFilter},
   groupMembershipFilter: #{groupMembershipFilter}, groupMembershipAttribute: #{groupMembershipAttribute}, groupMembershipSearchMethod: #{groupMembershipSearchMethod},
     rolesToInclude: #{rolesToInclude}, useOnlyListenerRoles: #{useOnlyListenerRoles}, baseDn: #{baseDn},
-    ldapUserNameAttribute: #{ldapUserNameAttribute}, hubotUserNameAttribute: #{hubotUserNameAttribute}, groupNameAttribute: #{groupNameAttribute}"
+    ldapUserNameAttribute: #{ldapUserNameAttribute}, hubotUserNameAttribute: #{hubotUserNameAttribute}, groupNameAttribute: #{groupNameAttribute}, userNameRewriteRule: #{userNameRewriteRule}"
 
   client = LDAP.createClient {
     url: ldapURL,
@@ -66,6 +68,8 @@ module.exports = (inputRobot) ->
   }
 
   getDnForUser = (userAttr, user) ->
+    if userNameRewriteRule
+      userAttr = userAttr.match(userNameRewriteRule)[1]
     dnSearch(getUserFilter(userAttr)).then (value) -> { user: user, dn: value }
 
 
