@@ -217,7 +217,8 @@ module.exports = (inputRobot) ->
       if userRoles?
         roles = [roles] if typeof roles is 'string'
         for role in roles
-          return true if role in userRoles
+          for userRole in userRoles
+            return true if role.toLowerCase() == userRole.toLowerCase()
       return false
 
     usersWithRole: (role) ->
